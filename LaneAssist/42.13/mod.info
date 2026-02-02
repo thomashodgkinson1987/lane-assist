@@ -1,0 +1,5 @@
+name=Lane Assist
+id=LaneAssist
+description=Adds an intelligent Lane Assist and Cruise Control system. helps drive straight on isometric roads. Press Left-Alt to Toggle.
+poster=poster.png
+versionMin=42.13.1
