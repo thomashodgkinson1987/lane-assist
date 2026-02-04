@@ -1,6 +1,6 @@
 name=Lane Assist
 id=LaneAssist
-description=Adds lane assistance. Helps drive straight. Press Left-Alt to toggle.
+description=Lane Assist. Press Left-Alt to toggle.
 poster=poster.png
 versionMin=42.13.1
 url=https://github.com/thomashodgkinson1987/lane-assist
