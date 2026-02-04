@@ -1,4 +1,356 @@
 -- =========================================================
+-- LANE ASSIST PHYSICS STEERING
+-- Physics-based vehicle control without reflection
+-- =========================================================
+
+local PhysicsSteering = {}
+
+-- =========================================================
+-- CONFIGURATION
+-- =========================================================
+PhysicsSteering.config = {
+    -- Force application parameters
+    TURN_FORCE_MULTIPLIER = 20000.0, -- Base force multiplier for turning
+    IMPULSE_POSITION_OFFSET = 2.5, -- Distance from vehicle center to apply force
+    MIN_FORCE_THRESHOLD = 100.0, -- Minimum force to apply (prevents micro-adjustments)
+    MAX_FORCE_LIMIT = 8000.0, -- Maximum safety limit for forces
+    -- Speed-based scaling (exponential for better high-speed control)
+    SPEED_SCALING_BASE = 0.7, -- Base scaling factor
+    SPEED_SCALING_EXPONENT = 0.8, -- Exponent for speed scaling
+    MIN_SPEED_FOR_FORCE = 5.0, -- Minimum speed to apply forces
+    -- Damping and stability
+    DAMPING_FACTOR = 0.92, -- Force reduction over time
+    FORCE_INTEGRAL_LIMIT = 2000.0, -- Maximum accumulated force
+    UPDATE_FREQUENCY = 1, -- Apply forces every N frames (2 = every other frame)
+    -- Vehicle type scaling
+    VEHICLE_MULTIPLIERS = {
+        ["Car"] = 1.0,
+        ["Truck"] = 1.3,
+        ["Van"] = 1.2,
+        ["SportsCar"] = 0.8,
+        ["default"] = 1.0
+    }
+}
+
+-- =========================================================
+-- INTERNAL STATE
+-- =========================================================
+PhysicsSteering.state = {
+    -- Reusable vectors for performance (avoid garbage collection)
+    impulseVector = org.joml.Vector3f.new(),
+    positionVector = org.joml.Vector3f.new(),
+    forwardVector = org.joml.Vector3f.new(),
+    rightVector = org.joml.Vector3f.new(),
+    -- Force tracking for stability
+    lastAppliedForce = 0.0,
+    forceIntegral = 0.0,
+    frameCounter = 0,
+    -- Vehicle detection cache
+    vehicleTypeCache = {},
+    lastVehicleId = -1,
+    -- Performance monitoring
+    lastUpdateTime = 0,
+    averageForceApplied = 0.0
+}
+
+-- =========================================================
+-- VEHICLE TYPE DETECTION
+-- =========================================================
+local function detectVehicleType(vehicle)
+    if not vehicle then
+        return "default"
+    end
+
+    local vehicleId = vehicle:getId()
+    local cached = PhysicsSteering.state.vehicleTypeCache[vehicleId]
+    if cached then
+        return cached
+    end
+
+    -- Try to determine vehicle type from script name
+    local scriptName = "default"
+    local script = vehicle:getScript()
+    if script then
+        scriptName = script:getName() or "default"
+    end
+
+    -- Classify vehicle type
+    local vehicleType = "default"
+    if scriptName:find("Car") or scriptName:find("Sedan") then
+        vehicleType = "Car"
+    elseif scriptName:find("Truck") or scriptName:find("Pickup") then
+        vehicleType = "Truck"
+    elseif scriptName:find("Van") or scriptName:find("Delivery") then
+        vehicleType = "Van"
+    elseif scriptName:find("Sports") or scriptName:find("Race") then
+        vehicleType = "SportsCar"
+    end
+
+    -- Cache the result
+    PhysicsSteering.state.vehicleTypeCache[vehicleId] = vehicleType
+    return vehicleType
+end
+
+-- =========================================================
+-- SPEED-BASED FORCE CALCULATION
+-- =========================================================
+local function calculateSpeedScaling(speed)
+    if speed < PhysicsSteering.config.MIN_SPEED_FOR_FORCE then
+        return 0.0 -- No force at very low speeds
+    end
+
+    -- Exponential scaling: better control at high speeds
+    local normalizedSpeed = math.min(speed / 50.0, 1.0) -- Normalize to 0-1 (50 km/h as reference)
+    local scaling =
+        PhysicsSteering.config.SPEED_SCALING_BASE *
+        math.pow(normalizedSpeed, PhysicsSteering.config.SPEED_SCALING_EXPONENT)
+
+    return math.max(scaling, 0.1) -- Minimum 10% scaling
+end
+
+-- =========================================================
+-- OPTIMAL IMPULSE POSITION CALCULATION
+-- =========================================================
+local function calculateOptimalImpulsePosition(vehicle)
+    -- Get vehicle's forward direction and up vector
+    vehicle:getForwardVector(PhysicsSteering.state.forwardVector)
+    local upVector = org.joml.Vector3f.new()
+    vehicle:getUpVector(upVector)
+
+    -- Calculate vehicle's right vector (perpendicular to forward)
+    local rightVector = org.joml.Vector3f.new()
+    rightVector:set(
+        -PhysicsSteering.state.forwardVector:z(),
+        0.0,
+        PhysicsSteering.state.forwardVector:x()
+    )
+
+    -- Apply force at front of vehicle relative to vehicle orientation
+    local offset = PhysicsSteering.config.IMPULSE_POSITION_OFFSET
+    PhysicsSteering.state.positionVector:set(
+        PhysicsSteering.state.forwardVector:x() * offset,
+        0.0, -- Keep force at ground level
+        PhysicsSteering.state.forwardVector:z() * offset
+    )
+
+    -- Store right vector for force direction calculation
+    PhysicsSteering.state.rightVector = rightVector
+
+    return PhysicsSteering.state.positionVector
+end
+
+-- =========================================================
+-- LATERAL FORCE CALCULATION
+-- =========================================================
+local function calculateLateralForce(steeringOutput, speed, vehicleType)
+    -- Get vehicle-specific multiplier
+    local vehicleMultiplier =
+        PhysicsSteering.config.VEHICLE_MULTIPLIERS[vehicleType] or PhysicsSteering.config.VEHICLE_MULTIPLIERS["default"]
+
+    -- Calculate speed scaling
+    local speedScaling = calculateSpeedScaling(speed)
+
+    -- Apply all scaling factors
+    local baseForce = steeringOutput * PhysicsSteering.config.TURN_FORCE_MULTIPLIER
+    local scaledForce = baseForce * vehicleMultiplier * speedScaling
+
+    -- Apply safety limits
+    local clampedForce =
+        math.max(-PhysicsSteering.config.MAX_FORCE_LIMIT, math.min(PhysicsSteering.config.MAX_FORCE_LIMIT, scaledForce))
+
+    -- Apply minimum threshold (prevents micro-adjustments that cause wobble)
+    if math.abs(clampedForce) < PhysicsSteering.config.MIN_FORCE_THRESHOLD then
+        return 0.0
+    end
+
+    return clampedForce
+end
+
+-- =========================================================
+-- FORCE DAMPING AND STABILITY
+-- =========================================================
+local function applyForceDamping(targetForce)
+    -- Apply damping to prevent oscillations
+    local dampedForce = targetForce * PhysicsSteering.config.DAMPING_FACTOR
+
+    -- Add integral term for smoother response
+    PhysicsSteering.state.forceIntegral = PhysicsSteering.state.forceIntegral + dampedForce
+
+    -- Limit integral to prevent buildup
+    local integralLimit = PhysicsSteering.config.FORCE_INTEGRAL_LIMIT
+    PhysicsSteering.state.forceIntegral =
+        math.max(-integralLimit, math.min(integralLimit, PhysicsSteering.state.forceIntegral))
+
+    -- Combine proportional and integral terms
+    local finalForce = dampedForce + (PhysicsSteering.state.forceIntegral * 0.1)
+
+    return finalForce
+end
+
+-- =========================================================
+-- CORE PHYSICS STEERING APPLICATION
+-- =========================================================
+local function applyPhysicsSteering(vehicle, steeringOutput, speed)
+    -- Update frame counter for frequency control
+    PhysicsSteering.state.frameCounter = PhysicsSteering.state.frameCounter + 1
+
+    -- Only apply forces every N frames for stability
+    if PhysicsSteering.state.frameCounter % PhysicsSteering.config.UPDATE_FREQUENCY ~= 0 then
+        return false
+    end
+
+    -- Detect vehicle type for scaling
+    local vehicleType = detectVehicleType(vehicle)
+
+    -- Calculate the lateral force needed
+    local lateralForce = calculateLateralForce(steeringOutput, speed, vehicleType)
+
+    -- Skip if force is too small
+    if math.abs(lateralForce) < PhysicsSteering.config.MIN_FORCE_THRESHOLD then
+        -- Decay integral when not applying force
+        PhysicsSteering.state.forceIntegral = PhysicsSteering.state.forceIntegral * 0.9
+        return false
+    end
+
+    -- Apply damping for stability
+    local dampedForce = applyForceDamping(lateralForce)
+
+    -- Create impulse vector using vehicle's right direction for consistent turning
+    PhysicsSteering.state.impulseVector:set(
+        PhysicsSteering.state.rightVector:x() * dampedForce,
+        0.0,
+        PhysicsSteering.state.rightVector:z() * dampedForce
+    )
+
+    -- Calculate optimal position to apply force
+    local impulsePosition = calculateOptimalImpulsePosition(vehicle)
+
+    -- Apply the physics impulse
+    local success =
+        pcall(
+        function()
+            vehicle:addImpulse(PhysicsSteering.state.impulseVector, impulsePosition)
+        end
+    )
+
+    if success then
+        -- Track applied force for monitoring
+        PhysicsSteering.state.lastAppliedForce = dampedForce
+        PhysicsSteering.state.averageForceApplied =
+            (PhysicsSteering.state.averageForceApplied * 0.9) + (math.abs(dampedForce) * 0.1)
+        return true
+    else
+        -- Reset integral on failure
+        PhysicsSteering.state.forceIntegral = 0.0
+        return false
+    end
+end
+
+-- =========================================================
+-- MAIN PUBLIC API
+-- =========================================================
+function setVehicleSteering(vehicle, steeringOutput)
+    if not vehicle then
+        return false
+    end
+
+    -- Get current speed for scaling
+    local speed = math.abs(vehicle:getCurrentSpeedKmHour())
+
+    -- Apply physics-based steering
+    return applyPhysicsSteering(vehicle, steeringOutput, speed)
+end
+
+-- =========================================================
+-- CONFIGURATION ACCESS
+-- =========================================================
+function PhysicsSteering.getConfig()
+    return PhysicsSteering.config
+end
+
+function PhysicsSteering.setConfig(key, value)
+    if PhysicsSteering.config[key] ~= nil then
+        PhysicsSteering.config[key] = value
+        return true
+    end
+    return false
+end
+
+-- =========================================================
+-- DIAGNOSTICS AND MONITORING
+-- =========================================================
+function PhysicsSteering.getDiagnostics()
+    return {
+        lastAppliedForce = PhysicsSteering.state.lastAppliedForce,
+        forceIntegral = PhysicsSteering.state.forceIntegral,
+        averageForceApplied = PhysicsSteering.state.averageForceApplied,
+        frameCounter = PhysicsSteering.state.frameCounter,
+        cachedVehicleTypes = #PhysicsSteering.state.vehicleTypeCache
+    }
+end
+
+function PhysicsSteering.resetState()
+    PhysicsSteering.state.forceIntegral = 0.0
+    PhysicsSteering.state.lastAppliedForce = 0.0
+    PhysicsSteering.state.frameCounter = 0
+    PhysicsSteering.state.averageForceApplied = 0.0
+end
+
+-- =========================================================
+-- VEHICLE-SPECIFIC CALIBRATION
+-- =========================================================
+function calibrateVehicle(vehicle, testForce)
+    if not vehicle then
+        return false
+    end
+
+    local vehicleType = detectVehicleType(vehicle)
+    local speed = math.abs(vehicle:getCurrentSpeedKmHour())
+
+    -- Test force application and measure response
+    local initialVelocity = org.joml.Vector3f.new()
+    vehicle:getLinearVelocity(initialVelocity)
+
+    -- Apply test force
+    PhysicsSteering.state.impulseVector:set(testForce, 0.0, 0.0)
+    local impulsePosition = calculateOptimalImpulsePosition(vehicle)
+
+    local success =
+        pcall(
+        function()
+            vehicle:addImpulse(PhysicsSteering.state.impulseVector, impulsePosition)
+        end
+    )
+
+    if success then
+        -- Return calibration data
+        return {
+            vehicleType = vehicleType,
+            testForce = testForce,
+            speed = speed,
+            initialVelocity = {x = initialVelocity:x(), y = initialVelocity:y(), z = initialVelocity:z()}
+        }
+    end
+
+    return false
+end
+
+-- =========================================================
+-- CLEANUP AND MAINTENANCE
+-- =========================================================
+function maintenance()
+    -- Clear old vehicle cache entries
+    local currentVehicle = getPlayer() and getPlayer():getVehicle()
+    if currentVehicle then
+        local currentId = currentVehicle:getId()
+        -- Keep only current vehicle in cache
+        local newCache = {}
+        newCache[currentId] = PhysicsSteering.state.vehicleTypeCache[currentId]
+        PhysicsSteering.state.vehicleTypeCache = newCache
+    end
+end
+
+-- =========================================================
 -- SHARED STATE (Bridge between Logic and UI)
 -- =========================================================
 LaneAssistData = {
@@ -42,49 +394,9 @@ local TARGET_ANGLES = {
 local _tempVector = org.joml.Vector3f.new()
 local _tempVelocity = org.joml.Vector3f.new()
 
-local fieldCache = {}
 local accumulatedError = 0
 local lastVehicleId = -1
 local lastToggleTime = 0
-
-local function getCachedField(object, fieldName)
-    if not object then
-        return nil
-    end
-    local cacheKey = fieldName
-    if fieldCache[cacheKey] then
-        return fieldCache[cacheKey]
-    end
-    if getNumClassFields(object) then
-        for i = 0, getNumClassFields(object) - 1 do
-            local field = getClassField(object, i)
-            if field and field:getName() == fieldName then
-                field:setAccessible(true)
-                fieldCache[cacheKey] = field
-                return field
-            end
-        end
-    end
-    return nil
-end
-
-local function setClientSteering(controller, value)
-    if not controller then
-        return
-    end
-    local controlsField = getCachedField(controller, "clientControls")
-    if not controlsField then
-        return
-    end
-    local clientControls = getClassFieldVal(controller, controlsField)
-    if not clientControls then
-        return
-    end
-    local steeringField = getCachedField(clientControls, "steering")
-    if steeringField then
-        steeringField:setFloat(clientControls, value)
-    end
-end
 
 local function getClosestTargetAngle(currentAngle)
     local bestAngle = TARGET_ANGLES[1]
@@ -229,14 +541,21 @@ local function onVehicleUpdate()
 
     -- 6. APPLY OUTPUT
     if math.abs(angleError) > 0.05 then
-        local controller = vehicle:getController()
-        setClientSteering(controller, finalSteering)
+        setVehicleSteering(vehicle, finalSteering)
     else
         accumulatedError = accumulatedError * 0.9
     end
 end
 
 Events.OnPlayerUpdate.Add(onVehicleUpdate)
+
+Events.OnTick.Add(
+    function()
+        if getTimestampMs() % 60000 < 100 then -- Every minute
+            maintenance()
+        end
+    end
+)
 
 -- =========================================================
 -- 2. THE UI HUD (COMPASS OVERLAY)
