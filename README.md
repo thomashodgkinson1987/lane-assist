@@ -1,4 +1,4 @@
-Lane Assist. Press Left-Alt to toggle.
+Lane Assist. Press Left-Alt to toggle enabled/disabled. Press Right-Shift to toggle visibility. Left-Click and drag to move.
 
 Workshop ID: 3659756282
 
@@ -29,6 +29,8 @@ The mod requires no additional configuration and works immediately.
 **Controls**
 
 - Left Alt - Toggle Lane Assist ON/OFF
+- Right Shift - Toggle widgit visibility
+- Left-Click Drag - Move widget
 - A/D or Arrow Keys - Manual steering (temporarily disables assist)
 
 **Visual Indicators:**
