@@ -358,13 +358,18 @@ LaneAssistData = {
     currentAngle = 0,
     targetAngle = 0,
     isActive = false,
-    cooldown = 0
+    cooldown = 0,
+    isUIVisible = true,
+    uiPositionOffset = {x=0, y=0},
+    isDragging = false,
+    dragStartMouse = {x=0, y=0}
 }
 
 -- =========================================================
 -- CONFIGURATION
 -- =========================================================
 local KEY_TOGGLE = 56 -- Left Alt
+local KEY_HIDE_SHOW = 54 -- Right Shift
 local COOLDOWN_TICKS = 60 -- 1 Second grace period after manual steering
 
 -- == ROAD ANGLES ==
@@ -435,6 +440,14 @@ local function onVehicleUpdate()
         lastToggleTime = currentTime
         local status = LaneAssistData.isEnabled and "ON" or "OFF"
         player:Say("Lane Assist: " .. status)
+    end
+
+    -- UI VISIBILITY TOGGLE CHECK
+    if isKeyDown(KEY_HIDE_SHOW) and (currentTime - lastToggleTime > 500) then
+        LaneAssistData.isUIVisible = not LaneAssistData.isUIVisible
+        lastToggleTime = currentTime
+        local status = LaneAssistData.isUIVisible and "Shown" or "Hidden"
+        player:Say("Lane Assist UI: " .. status)
     end
 
     if not LaneAssistData.isEnabled then
@@ -565,18 +578,70 @@ LaneAssistOverlay = ISUIElement:derive("LaneAssistOverlay")
 
 function LaneAssistOverlay:new()
     local o = {}
-    o = ISUIElement:new(0, 0, 0, 0)
+    o = ISUIElement:new(0, 0, 30, 30)
     setmetatable(o, self)
     self.__index = self
-    o.width = 1
-    o.height = 1
+    o.width = 30
+    o.height = 30
     o.anchorLeft = true
     o.anchorTop = true
+    o:setCapture(true)
     return o
 end
 
+function LaneAssistOverlay:onMouseDown(x, y)
+    if not LaneAssistData.isUIVisible then
+        return false
+    end
+
+    -- Get compass center and radius
+    local core = getCore()
+    local screenWidth = core:getScreenWidth()
+    local screenHeight = core:getScreenHeight()
+    local compassX = (screenWidth / 2) + LaneAssistData.uiPositionOffset.x
+    local compassY = (screenHeight / 2) + LaneAssistData.uiPositionOffset.y
+    local zoom = core:getZoom(0)
+    local scale = 1 / zoom
+    if scale < 0.5 then
+        scale = 0.5
+    end
+    local radius = 30 * scale
+
+    -- Check if click is within compass bounds
+    local distance = math.sqrt((x - compassX)^2 + (y - compassY)^2)
+    if distance <= radius then
+        LaneAssistData.isDragging = true
+        LaneAssistData.dragStartMouse.x = 0
+        LaneAssistData.dragStartMouse.y = 0
+        return true
+    end
+    return false
+end
+
+function LaneAssistOverlay:onMouseMove(x, y)
+    if LaneAssistData.isDragging then
+        --LaneAssistData.dragStartMouse.x = LaneAssistData.dragStartMouse.x + x
+        --LaneAssistData.dragStartMouse.y = LaneAssistData.dragStartMouse.y + y
+        -- Update position offset based on mouse movement
+        --LaneAssistData.uiPositionOffset.x = LaneAssistData.dragStartMouse.x
+        --LaneAssistData.uiPositionOffset.y = LaneAssistData.dragStartMouse.y
+        LaneAssistData.uiPositionOffset.x = LaneAssistData.uiPositionOffset.x + x
+        LaneAssistData.uiPositionOffset.y = LaneAssistData.uiPositionOffset.y + y
+        return true
+    end
+    return false
+end
+
+function LaneAssistOverlay:onMouseUp(x, y)
+    if LaneAssistData.isDragging then
+        LaneAssistData.isDragging = false
+        return true
+    end
+    return false
+end
+
 function LaneAssistOverlay:prerender()
-    if not LaneAssistData.isActive then
+    if not LaneAssistData.isActive or not LaneAssistData.isUIVisible then
         return
     end
 
@@ -585,18 +650,14 @@ function LaneAssistOverlay:prerender()
         return
     end
 
-    -- UI Coordinates
-    local x = player:getX()
-    local y = player:getY()
-    local z = player:getZ()
-    local sx = IsoUtils.XToScreen(x, y, z + 1.5, 0)
-    local sy = IsoUtils.YToScreen(x, y, z + 1.5, 0)
-
+    -- Screen Coordinates (center of screen + custom offset)
     local core = getCore()
-    local zoom = core:getZoom(0)
-    sx = (sx - IsoCamera.getOffX()) / zoom
-    sy = (sy - IsoCamera.getOffY()) / zoom
+    local screenWidth = core:getScreenWidth()
+    local screenHeight = core:getScreenHeight()
+    local sx = (screenWidth / 2) + LaneAssistData.uiPositionOffset.x
+    local sy = (screenHeight / 2) + LaneAssistData.uiPositionOffset.y
 
+    local zoom = core:getZoom(0)
     local scale = 1 / zoom
     if scale < 0.5 then
         scale = 0.5

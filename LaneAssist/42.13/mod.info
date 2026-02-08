@@ -1,6 +1,6 @@
 name=Lane Assist
 id=LaneAssist
-description=Lane Assist. Press Left-Alt to toggle.
+description=Lane Assist. Press Left-Alt to toggle enabled/disabled. Press Right-Shift to toggle visibility. Left-Click and drag to move.
 poster=poster.png
 versionMin=42.13.1
 url=https://github.com/thomashodgkinson1987/lane-assist
