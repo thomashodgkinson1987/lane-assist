@@ -29,7 +29,7 @@ The mod requires no additional configuration and works immediately.
 **Controls**
 
 - Left Alt - Toggle Lane Assist ON/OFF
-- Right Shift - Toggle widgit visibility
+- Right Shift - Toggle widget visibility
 - Left-Click Drag - Move widget
 - A/D or Arrow Keys - Manual steering (temporarily disables assist)
 
