@@ -1,6 +1,6 @@
 name=Lane Assist
 id=LaneAssist
-description=Lane Assist. Press Left-Alt to toggle enabled/disabled. Press Right-Shift to toggle visibility. Left-Click and drag to move.
+description=Lane Assist. Left-Alt toggles enabled/disabled, Right-Shift toggles widget visibility (widget hidden by default; keys rebindable in Options > MODS). Left-Click and drag to move.
 poster=poster.png
 versionMin=42.13.1
 url=https://github.com/thomashodgkinson1987/lane-assist

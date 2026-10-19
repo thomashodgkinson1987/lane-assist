@@ -1,4 +1,4 @@
-Lane Assist. Press Left-Alt to toggle enabled/disabled. Press Right-Shift to toggle visibility. Left-Click and drag to move.
+Lane Assist. Left-Alt toggles enabled/disabled and Right-Shift toggles widget visibility (widget hidden by default; keys rebindable via Options > MODS). Left-Click and drag to move.
 
 Workshop ID: 3659756282
 
@@ -24,12 +24,14 @@ Key Features:
 2. Launch Project Zomboid with mods enabled
 3. Start a game and enter any vehicle
 
-The mod requires no additional configuration and works immediately.
+The mod works immediately with no configuration required; optional settings (keybinds) are available under Options > MODS.
 
 **Controls**
 
-- Left Alt - Toggle Lane Assist ON/OFF
-- Right Shift - Toggle widget visibility
+Keybinds can be changed in-game under Options > MODS > Lane Assist (defaults below).
+
+- Left Alt - Toggle Lane Assist ON/OFF (Lane Assist is on by default)
+- Right Shift - Toggle widget visibility (widget starts hidden; press once to show it)
 - Left-Click Drag - Move widget
 - A/D or Arrow Keys - Manual steering (temporarily disables assist)
 
@@ -42,7 +44,7 @@ The mod requires no additional configuration and works immediately.
 **Usage**
 
 1. Start your vehicle and begin driving
-2. Press Left Alt to enable Lane Assist
+2. Lane Assist is on by default - use your toggle key (default: Left Alt) to switch it on or off
 3. Drive in any direction - system will automatically correct to nearest road angle
 4. Manual steering (A/D/Arrows) anytime to override
 

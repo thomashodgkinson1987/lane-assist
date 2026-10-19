@@ -359,7 +359,7 @@ LaneAssistData = {
     targetAngle = 0,
     isActive = false,
     cooldown = 0,
-    isUIVisible = true,
+    isUIVisible = false, -- Hidden by default; reveal with the rebindable key (Options > MODS)
     uiPositionOffset = {x=0, y=0},
     isDragging = false,
     dragStartMouse = {x=0, y=0}
@@ -368,8 +368,33 @@ LaneAssistData = {
 -- =========================================================
 -- CONFIGURATION
 -- =========================================================
-local KEY_TOGGLE = 56 -- Left Alt
-local KEY_HIDE_SHOW = 54 -- Right Shift
+-- Keybinds are registered through B42's native mod options, so players can
+-- rebind them in Options > MODS (values persist in Lua/modOptions.ini).
+local options = PZAPI.ModOptions:create("LaneAssist", "Lane Assist")
+options:addDescription("Automatic vehicle straightening while driving.")
+local toggleKeyOption = options:addKeyBind(
+    "toggleAssist",
+    "Toggle Lane Assist On/Off",
+    Keyboard.KEY_LMENU, -- Left Alt
+    "Toggles lane assist on/off."
+)
+local uiKeyOption = options:addKeyBind(
+    "toggleUI",
+    "Show/Hide Compass Widget",
+    Keyboard.KEY_RSHIFT, -- Right Shift
+    "Toggles the visibility of the compass widget."
+)
+
+-- Cache the current keycodes
+local KEY_TOGGLE = toggleKeyOption:getValue()
+local KEY_HIDE_SHOW = uiKeyOption:getValue()
+
+-- Refresh the cached keycodes when the player saves the mod options
+options.apply = function()
+    KEY_TOGGLE = toggleKeyOption:getValue()
+    KEY_HIDE_SHOW = uiKeyOption:getValue()
+end
+
 local COOLDOWN_TICKS = 60 -- 1 Second grace period after manual steering
 
 -- == ROAD ANGLES ==
@@ -428,12 +453,10 @@ local function onVehicleUpdate()
 
     LaneAssistData.isActive = (vehicle and vehicle:getDriver() == player and vehicle:isEngineRunning())
 
-    if not LaneAssistData.isActive then
-        accumulatedError = 0
-        return
-    end
-
     -- 1. TOGGLE CHECK
+    -- Placed before the isActive early-return so both keys work any time,
+    -- which lets players reveal (or hide) the widget before ever driving,
+    -- since it starts hidden.
     local currentTime = getTimestampMs()
     if isKeyDown(KEY_TOGGLE) and (currentTime - lastToggleTime > 500) then
         LaneAssistData.isEnabled = not LaneAssistData.isEnabled
@@ -448,6 +471,11 @@ local function onVehicleUpdate()
         lastToggleTime = currentTime
         local status = LaneAssistData.isUIVisible and "Shown" or "Hidden"
         player:Say("Lane Assist UI: " .. status)
+    end
+
+    if not LaneAssistData.isActive then
+        accumulatedError = 0
+        return
     end
 
     if not LaneAssistData.isEnabled then
