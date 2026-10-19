@@ -395,6 +395,22 @@ options.apply = function()
     KEY_HIDE_SHOW = uiKeyOption:getValue()
 end
 
+-- The saved keybinds are read from the cache folder's modOptions.ini after
+-- our Lua file has run on a cold boot, so the snapshot above still holds the
+-- default keys at that point. Re-apply the options once the main menu (and
+-- its loaded options data) exists, and again whenever a save session starts,
+-- so custom keybinds work without visiting the options screen.
+Events.OnMainMenuEnter.Add(
+    function()
+        options:apply()
+    end
+)
+Events.OnGameStart.Add(
+    function()
+        options:apply()
+    end
+)
+
 local COOLDOWN_TICKS = 60 -- 1 Second grace period after manual steering
 
 -- == ROAD ANGLES ==
@@ -613,7 +629,9 @@ function LaneAssistOverlay:new()
     o.height = 30
     o.anchorLeft = true
     o.anchorTop = true
-    o:setCapture(true)
+    -- No setCapture(true): capturing mouse events made this invisible overlay
+    -- swallow clicks meant for other HUD elements (e.g. the top inventory bar).
+    -- Without it the widget is fixed at screen centre and cannot be dragged.
     return o
 end
 

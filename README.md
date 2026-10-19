@@ -1,4 +1,4 @@
-Lane Assist. Left-Alt toggles enabled/disabled and Right-Shift toggles widget visibility (widget hidden by default; keys rebindable via Options > MODS). Left-Click and drag to move.
+Lane Assist. Left-Alt toggles enabled/disabled and Right-Shift toggles widget visibility (widget hidden by default; keys rebindable via Options > MODS).
 
 Workshop ID: 3659756282
 
@@ -32,8 +32,9 @@ Keybinds can be changed in-game under Options > MODS > Lane Assist (defaults bel
 
 - Left Alt - Toggle Lane Assist ON/OFF (Lane Assist is on by default)
 - Right Shift - Toggle widget visibility (widget starts hidden; press once to show it)
-- Left-Click Drag - Move widget
 - A/D or Arrow Keys - Manual steering (temporarily disables assist)
+
+The compass widget is fixed at the centre of the screen.
 
 **Visual Indicators:**
 - Red Border - Lane Assist OFF
