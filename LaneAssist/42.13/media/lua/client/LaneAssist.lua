@@ -385,6 +385,26 @@ local uiKeyOption = options:addKeyBind(
     "Toggles the visibility of the compass widget."
 )
 
+-- Re-engagement delay is a free-text field, so parse and clamp it defensively.
+local delayOption = options:addTextEntry(
+    "assistDelay",
+    "Assist Re-Engagement Delay (seconds)",
+    "1.0",
+    "How long after you release manual steering (A/D/arrows) before Lane Assist takes over again. Accepts decimals, e.g. 1.5"
+)
+
+-- Seconds to wait after manual steering ends before the assist re-engages.
+-- Invalid text entries (e.g. empty or not a number) keep the last valid value.
+local ASSIST_DELAY_SECONDS = 1.0
+local function updateDelaySetting()
+    -- gsub returns (string, count); assigning to one variable keeps just the string
+    local text = (delayOption:getValue() or ""):gsub(",", ".")
+    local value = tonumber(text)
+    if value then
+        ASSIST_DELAY_SECONDS = math.max(0.0, math.min(10.0, value))
+    end
+end
+
 -- Cache the current keycodes
 local KEY_TOGGLE = toggleKeyOption:getValue()
 local KEY_HIDE_SHOW = uiKeyOption:getValue()
@@ -393,6 +413,7 @@ local KEY_HIDE_SHOW = uiKeyOption:getValue()
 options.apply = function()
     KEY_TOGGLE = toggleKeyOption:getValue()
     KEY_HIDE_SHOW = uiKeyOption:getValue()
+    updateDelaySetting()
 end
 
 -- The saved keybinds are read from the cache folder's modOptions.ini after
@@ -411,7 +432,10 @@ Events.OnGameStart.Add(
     end
 )
 
-local COOLDOWN_TICKS = 60 -- 1 Second grace period after manual steering
+-- Re-engagement deadline (ms, from getTimestampMs) stamped when manual
+-- steering ends. Real time rather than per-frame ticks, so the configured
+-- delay means the same thing at any framerate.
+local cooldownUntilMs = 0
 
 -- == ROAD ANGLES ==
 local TARGET_ANGLES = {
@@ -513,15 +537,18 @@ local function onVehicleUpdate()
             isKeyDown(Keyboard.KEY_RIGHT)
      then
         accumulatedError = 0
-        LaneAssistData.cooldown = COOLDOWN_TICKS
+        cooldownUntilMs = currentTime + (ASSIST_DELAY_SECONDS * 1000.0)
+        LaneAssistData.cooldown = ASSIST_DELAY_SECONDS
         return
     end
 
-    -- Cooldown Timer
-    if LaneAssistData.cooldown > 0 then
-        LaneAssistData.cooldown = LaneAssistData.cooldown - 1
+    -- Cooldown Timer (checked against a real-time deadline in ms)
+    local remainingMs = cooldownUntilMs - currentTime
+    if remainingMs > 0 then
+        LaneAssistData.cooldown = remainingMs / 1000.0
         return
     end
+    LaneAssistData.cooldown = 0
 
     -- 3. PHYSICS CHECKS (Speed & Direction)
     local speed = math.abs(vehicle:getCurrentSpeedKmHour())

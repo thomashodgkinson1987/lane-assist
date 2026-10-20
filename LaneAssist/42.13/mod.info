@@ -1,6 +1,6 @@
 name=Lane Assist
 id=LaneAssist
-description=Lane Assist. Left-Alt toggles enabled/disabled, Right-Shift toggles widget visibility (widget hidden by default; keys rebindable in Options > MODS).
+description=Lane Assist. Left-Alt toggles enabled/disabled, Right-Shift toggles widget visibility (widget hidden by default; keys rebindable in Options > MODS). Assist re-engagement delay configurable in Options > MODS.
 poster=poster.png
 versionMin=42.13.1
 url=https://github.com/thomashodgkinson1987/lane-assist

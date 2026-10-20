@@ -1,4 +1,4 @@
-Lane Assist. Left-Alt toggles enabled/disabled and Right-Shift toggles widget visibility (widget hidden by default; keys rebindable via Options > MODS).
+Lane Assist. Left-Alt toggles enabled/disabled and Right-Shift toggles widget visibility (widget hidden by default; keys rebindable via Options > MODS). Assist re-engagement delay is configurable under Options > MODS.
 
 Workshop ID: 3659756282
 
@@ -24,7 +24,7 @@ Key Features:
 2. Launch Project Zomboid with mods enabled
 3. Start a game and enter any vehicle
 
-The mod works immediately with no configuration required; optional settings (keybinds) are available under Options > MODS.
+The mod works immediately with no configuration required; optional settings (keybinds and the assist re-engagement delay) are available under Options > MODS.
 
 **Controls**
 
@@ -41,6 +41,12 @@ The compass widget is fixed at the centre of the screen.
 - Green Border - Lane Assist active and working
 - Orange Border - Manual override cooldown period
 - Yellow/Blue Marker - Target angle on compass
+
+**Settings**
+
+Available in-game under Options > MODS > Lane Assist (applied as soon as the options screen is confirmed, and remembered between sessions).
+
+- Assist Re-Engagement Delay (seconds) - How long after you release manual steering (A/D/arrows) before the assist takes over again. A larger value stops the assist from yanking the car right after small turns; 0 re-engages instantly. Accepts decimals (e.g. 1.5); range 0-10, default 1.0. Invalid entries keep the last valid value. The compass border stays orange while the delay is running.
 
 **Usage**
 
